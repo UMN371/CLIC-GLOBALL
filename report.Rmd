@@ -34,14 +34,22 @@ if (is.null(d) || !nrow(d)) {
 } else {
   for (pg in pages) {
     dp <- d[d$page == pg, ]
-    dp <- dp[order(dp$col_order), ]
+    
+    # 🛡️ SAFETY FIX: Only sort if the data frame actually has rows and the column exists!
+    if (nrow(dp) > 0 && "col_order" %in% names(dp)) {
+      dp <- dp[order(dp$col_order), ]
+    }
+    
     cat("\n## ", disp(pg), "\n\n", sep = "")
     if (!nrow(dp)) { cat("*No record for this study in this tab.*\n\n"); next }
+    
     meta <- c(unique(dp$country[nzchar(dp$country)]),
               unique(dp$institution[nzchar(dp$institution)]))
     if (length(meta)) cat("*", paste(meta, collapse = " \u00b7 "), "*\n\n", sep = "")
+    
     print(kable(data.frame(Milestone = dp$milestone, Status = dp$status),
                 row.names = FALSE))
+    
     notes <- unique(dp$notes[nzchar(dp$notes)])
     if (length(notes)) cat("\n\n**Notes:** ", paste(notes, collapse = "; "), "\n\n", sep = "")
     cat("\n")
