@@ -4,6 +4,8 @@ params:
   study: "Study"
   data: NULL
   pages: NULL
+  scope: "default_value"
+  colors: "default_value"
 output:
   pdf_document:
     latex_engine: xelatex

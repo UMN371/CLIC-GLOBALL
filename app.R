@@ -469,15 +469,39 @@ server <- function(input, output, session){
     if(length(parts)) paste(parts,collapse=" \u00b7 ") else "All studies" })
 
   output$report <- downloadHandler(
-    filename=function() paste0("CLIC_progress_",Sys.Date(),".",c(html="html",word="docx",pdf="pdf")[[input$fmt]]),
-    content=function(file){
-      fmt<-c(html="html_document",word="word_document",pdf="pdf_document")[[input$fmt]]
-      tmp<-file.path(tempdir(),"report.Rmd"); file.copy("report.Rmd",tmp,overwrite=TRUE)
-      dat <- base() |> transmute(page, country=group, institution=inst, study=label, milestone, status, notes)
-      withProgress(message=paste0("Rendering ",toupper(input$fmt),"\u2026"), value=0.5, {
-        rmarkdown::render(tmp, output_format=fmt, output_file=file,
-          params=list(data=as.data.frame(dat), scope=scope_txt(), colors=STATUS_COLORS),
-          envir=new.env(parent=globalenv())) }) })
+    filename = function() {
+      paste0("CLIC_progress_", Sys.Date(), ".", c(html = "html", word = "docx", pdf = "pdf")[[input$fmt]])
+    },
+    content = function(file) {
+      # 1. Determine the output format based on user input
+      fmt <- c(html = "html_document", word = "word_document", pdf = "pdf_document")[[input$fmt]]
+      
+      # 2. Copy report template to a safe scratch directory
+      tmp <- file.path(tempdir(), "report.Rmd")
+      file.copy("report.Rmd", tmp, overwrite = TRUE)
+      
+      # 3. Clean and prepare the data pipeline
+      dat <- base() |> transmute(page, country = group, institution = inst, study = label, milestone, status, notes)
+      
+      # 4. Render the document with progress bar tracking
+      withProgress(message = paste0("Rendering ", toupper(input$fmt), "\u2026"), value = 0.5, {
+        rmarkdown::render(
+          input = tmp, 
+          output_format = fmt, 
+          output_file = file,
+          params = list(
+            study = "Study",                  # Passed to match template expectation
+            data = as.data.frame(dat),        # Converted tibble to dataframe
+            pages = NULL,                     # Passed to match template expectation
+            scope = scope_txt(), 
+            colors = STATUS_COLORS
+          ),
+          envir = new.env(parent = globalenv())
+        ) 
+      })
+    }
+  )
+  
 
   output$study_view <- renderUI({ req(input$sel_study); render_study(input$sel_study) })
   study_dl <- function(fmt) downloadHandler(
