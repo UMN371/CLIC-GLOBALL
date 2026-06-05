@@ -473,26 +473,21 @@ server <- function(input, output, session){
       paste0("CLIC_progress_", Sys.Date(), ".", c(html = "html", word = "docx", pdf = "pdf")[[input$fmt]])
     },
     content = function(file) {
-      # 1. Determine the output format based on user input
       fmt <- c(html = "html_document", word = "word_document", pdf = "pdf_document")[[input$fmt]]
-      
-      # 2. Copy report template to a safe scratch directory
-      tmp <- file.path(tempdir(), "report.Rmd")
+      tmp <- file.path(tempdir(), "report.Rmd") 
       file.copy("report.Rmd", tmp, overwrite = TRUE)
       
-      # 3. Clean and prepare the data pipeline
       dat <- base() |> transmute(page, country = group, institution = inst, study = label, milestone, status, notes)
       
-      # 4. Render the document with progress bar tracking
       withProgress(message = paste0("Rendering ", toupper(input$fmt), "\u2026"), value = 0.5, {
         rmarkdown::render(
           input = tmp, 
           output_format = fmt, 
           output_file = file,
           params = list(
-            study = "Study",                  # Passed to match template expectation
-            data = as.data.frame(dat),        # Converted tibble to dataframe
-            pages = NULL,                     # Passed to match template expectation
+            study = "Study",                  # Added: Matches the default in your YAML
+            data = as.data.frame(dat),
+            pages = NULL,                     # Added: Matches the default in your YAML
             scope = scope_txt(), 
             colors = STATUS_COLORS
           ),
@@ -502,7 +497,6 @@ server <- function(input, output, session){
     }
   )
   
-
   output$study_view <- renderUI({ req(input$sel_study); render_study(input$sel_study) })
   study_dl <- function(fmt) downloadHandler(
     filename=function() paste0("GlobALL_", gsub("[^A-Za-z0-9]+","_",input$sel_study), "_",

@@ -1,62 +1,71 @@
 ---
-title: "GlobALL — Study Summary"
-params:
-  study: "Study"
-  data: NULL
-  pages: NULL
-  scope: "default_value"
-  colors: "default_value"
+title: "CLIC DCC — Progress Report"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
 output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+  word_document:
+    toc: true
   pdf_document:
+    toc: true
     latex_engine: xelatex
-  word_document: default
+params:
+  data: NULL
+  scope: "All countries"
+  colors: NULL
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-library(knitr)
-d      <- params$data
-study  <- params$study
-pages  <- params$pages
-if (is.null(pages)) pages <- unique(as.character(d$page))
-SHORT <- c("Genomic Pipeline"="GlobALL Pipeline","Phenotype Data"="Phenotype Data",
-           "Epi Data"="Epi Data","IARC DCC Transfer"="IARC DCC")
-disp <- function(p) if (!is.na(SHORT[p])) unname(SHORT[p]) else p
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE, fig.width=9, fig.height=4)
+library(dplyr); library(ggplot2); library(knitr)
+d <- params$data
+PAL <- params$colors
+if (is.null(PAL)) PAL <- c("Complete"="#4CAF50","In Process"="#ffcc33","Incomplete"="#E0413B",
+         "N/A"="#1F1F1F","Unknown"="#D2D2D2")
+PAGES <- unique(as.character(d$page))
 ```
 
-# `r study`
+**Scope:** `r params$scope`  
+**Studies:** `r length(unique(d$study))`  **·  Countries:** `r length(unique(d$country))`  
+**Overall complete:** `r round(mean(d$status=="Complete")*100)`%  **·  Still unknown:** `r round(mean(d$status=="Unknown")*100)`%
 
-Generated `r format(Sys.Date(), "%d %B %Y")` from the GlobALL dashboard.
+## Status mix by page
 
-```{r results='asis'}
-if (is.null(d) || !nrow(d)) {
-  cat("No records found for this study.\n\n")
-} else {
-  for (pg in pages) {
-    dp <- d[d$page == pg, ]
-    
-    # 🛡️ SAFETY FIX: Only sort if the data frame actually has rows and the column exists!
-    if (nrow(dp) > 0 && "col_order" %in% names(dp)) {
-      dp <- dp[order(dp$col_order), ]
-    }
-    
-    cat("\n## ", disp(pg), "\n\n", sep = "")
-    if (!nrow(dp)) { cat("*No record for this study in this tab.*\n\n"); next }
-    
-    meta <- c(unique(dp$country[nzchar(dp$country)]),
-              unique(dp$institution[nzchar(dp$institution)]))
-    if (length(meta)) cat("*", paste(meta, collapse = " \u00b7 "), "*\n\n", sep = "")
-    
-    print(kable(data.frame(Milestone = dp$milestone, Status = dp$status),
-                row.names = FALSE))
-    
-    notes <- unique(dp$notes[nzchar(dp$notes)])
-    if (length(notes)) cat("\n\n**Notes:** ", paste(notes, collapse = "; "), "\n\n", sep = "")
-    cat("\n")
-  }
-}
+```{r}
+d |> count(page, status) |>
+  mutate(page = factor(page, levels = PAGES)) |>
+  ggplot(aes(page, n, fill = status)) +
+  geom_col(width=.7) + scale_fill_manual(values = PAL, drop = FALSE) +
+  labs(x=NULL, y="Cells", fill=NULL) +
+  theme_minimal(base_size=12) + theme(legend.position="top")
+```
+
+## Completion by page
+
+```{r}
+d |> group_by(Page = factor(page, levels = PAGES)) |>
+  summarise(Complete=sum(status=="Complete"),
+            `In process`=sum(status=="In Process"),
+            Incomplete=sum(status=="Incomplete"),
+            `N/A`=sum(status=="N/A"),
+            Unknown=sum(status=="Unknown"),
+            `% complete`=round(mean(status=="Complete")*100), .groups="drop") |>
+  arrange(Page) |> kable()
+```
+
+## Flagged studies (Notes)
+
+```{r}
+hasinst <- "institution" %in% names(d) && any(nzchar(d$institution))
+flagged <- if (hasinst) d |> filter(notes != "") |> distinct(country, institution, study, notes)
+           else d |> filter(notes != "") |> distinct(country, study, notes)
+if (nrow(flagged)) kable(flagged,
+   col.names = if (hasinst) c("Country","Institution","Study","Note") else c("Country","Study","Note")) else
+  cat("No notes flagged in the current scope.")
 ```
 
 ---
 
-<small>Status reflects what is currently entered in clic_data.xlsx; blank/Unknown values are awaiting confirmation.</small>
+<small>Generated from the CLIC DCC Global Progress Dashboard. Status reflects whatever has been entered in <code>clic_data.xlsx</code>; blank/Unknown cells are awaiting confirmation.</small>
