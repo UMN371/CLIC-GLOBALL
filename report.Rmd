@@ -2,19 +2,18 @@
 title: "CLIC DCC — Progress Report"
 date: "`r format(Sys.Date(), '%d %B %Y')`"
 output:
+  word_document:
+    toc: true
   html_document:
     theme: flatly
     toc: true
     toc_float: true
-  word_document:
-    toc: true
-  pdf_document:
-    toc: true
-    latex_engine: xelatex
 params:
   data: NULL
   scope: "All countries"
   colors: NULL
+  study: "Study"
+  pages: NULL
 ---
 
 ```{r setup, include=FALSE}
@@ -24,7 +23,12 @@ d <- params$data
 PAL <- params$colors
 if (is.null(PAL)) PAL <- c("Complete"="#4CAF50","In Process"="#ffcc33","Incomplete"="#E0413B",
          "N/A"="#1F1F1F","Unknown"="#D2D2D2")
-PAGES <- unique(as.character(d$page))
+
+if (!is.null(d) && nrow(d) > 0) {
+  PAGES <- unique(as.character(d$page))
+} else {
+  PAGES <- character(0)
+}
 ```
 
 **Scope:** `r params$scope`  
@@ -34,36 +38,48 @@ PAGES <- unique(as.character(d$page))
 ## Status mix by page
 
 ```{r}
-d |> count(page, status) |>
-  mutate(page = factor(page, levels = PAGES)) |>
-  ggplot(aes(page, n, fill = status)) +
-  geom_col(width=.7) + scale_fill_manual(values = PAL, drop = FALSE) +
-  labs(x=NULL, y="Cells", fill=NULL) +
-  theme_minimal(base_size=12) + theme(legend.position="top")
+if (!is.null(d) && nrow(d) > 0) {
+  d |> count(page, status) |>
+    mutate(page = factor(page, levels = PAGES)) |>
+    ggplot(aes(page, n, fill = status)) +
+    geom_col(width=.7) + scale_fill_manual(values = PAL, drop = FALSE) +
+    labs(x=NULL, y="Cells", fill=NULL) +
+    theme_minimal(base_size=12) + theme(legend.position="top")
+} else {
+  cat("No data available to display plots.\n")
+}
 ```
 
 ## Completion by page
 
 ```{r}
-d |> group_by(Page = factor(page, levels = PAGES)) |>
-  summarise(Complete=sum(status=="Complete"),
-            `In process`=sum(status=="In Process"),
-            Incomplete=sum(status=="Incomplete"),
-            `N/A`=sum(status=="N/A"),
-            Unknown=sum(status=="Unknown"),
-            `% complete`=round(mean(status=="Complete")*100), .groups="drop") |>
-  arrange(Page) |> kable()
+if (!is.null(d) && nrow(d) > 0) {
+  d |> group_by(Page = factor(page, levels = PAGES)) |>
+    summarise(Complete=sum(status=="Complete"),
+              `In process`=sum(status=="In Process"),
+              Incomplete=sum(status=="Incomplete"),
+              `N/A`=sum(status=="N/A"),
+              Unknown=sum(status=="Unknown"),
+              `% complete`=round(mean(status=="Complete")*100), .groups="drop") |>
+    arrange(Page) |> kable()
+} else {
+  cat("No data available to display metrics table.\n")
+}
 ```
 
 ## Flagged studies (Notes)
 
 ```{r}
-hasinst <- "institution" %in% names(d) && any(nzchar(d$institution))
-flagged <- if (hasinst) d |> filter(notes != "") |> distinct(country, institution, study, notes)
-           else d |> filter(notes != "") |> distinct(country, study, notes)
-if (nrow(flagged)) kable(flagged,
-   col.names = if (hasinst) c("Country","Institution","Study","Note") else c("Country","Study","Note")) else
-  cat("No notes flagged in the current scope.")
+if (!is.null(d) && nrow(d) > 0) {
+  hasinst <- "institution" %in% names(d) && any(nzchar(d$institution))
+  flagged <- if (hasinst) d |> filter(notes != "") |> distinct(country, institution, study, notes)
+             else d |> filter(notes != "") |> distinct(country, study, notes)
+  if (nrow(flagged)) kable(flagged,
+     col.names = if (hasinst) c("Country","Institution","Study","Note") else c("Country","Study","Note")) else
+    cat("No notes flagged in the current scope.")
+} else {
+  cat("No data available to scan for flagged notes.\n")
+}
 ```
 
 ---
