@@ -1,5 +1,5 @@
 ---
-title: "GlobALL — Study Summary"
+title: "CLIC — Study Summary"
 params:
   study: "Study"
   data: NULL
@@ -17,14 +17,26 @@ d      <- params$data
 study  <- params$study
 pages  <- params$pages
 if (is.null(pages)) pages <- unique(as.character(d$page))
-SHORT <- c("Genomic Pipeline"="GlobALL Pipeline","Phenotype Data"="Phenotype Data",
+SHORT <- c("Genomic Pipeline"="Genomic Pipeline","Phenotype Data"="Phenotype Data",
            "Epi Data"="Epi Data","IARC DCC Transfer"="IARC DCC")
-disp <- function(p) if (!is.na(SHORT[p])) unname(SHORT[p]) else p
+disp <- function(p) if (p %in% names(SHORT)) unname(SHORT[p]) else p
+has_proj <- !is.null(d) && "project" %in% names(d)
+has_canc <- !is.null(d) && "cancer"  %in% names(d)
 ```
 
 # `r study`
 
-Generated `r format(Sys.Date(), "%d %B %Y")` from the GlobALL dashboard.
+Generated `r format(Sys.Date(), "%d %B %Y")` from the CLIC dashboard.
+
+```{r results='asis'}
+if (!is.null(d) && nrow(d)) {
+  is_globall <- has_proj && any(d$project == "GlobALL")
+  canc <- if (has_canc) unique(d$cancer[nzchar(d$cancer)]) else character(0)
+  tags <- c(if (is_globall) "GlobALL project" else NULL,
+            if (length(canc)) paste0("Cancer types: ", paste(canc, collapse = ", ")) else NULL)
+  if (length(tags)) cat("*", paste(tags, collapse = " \u00b7 "), "*\n\n", sep = "")
+}
+```
 
 ```{r results='asis'}
 if (is.null(d) || !nrow(d)) {
@@ -44,9 +56,10 @@ if (is.null(d) || !nrow(d)) {
     if (length(notes)) cat("\n\n**Notes:** ", paste(notes, collapse = "; "), "\n\n", sep = "")
     cat("\n")
   }
+  cat("\n> **Note:** Qc-ALL study status is to be determined (TBD).\n\n")
 }
 ```
 
 ---
 
-<small>Status reflects what is currently entered in clic_data.xlsx; blank/Unknown values are awaiting confirmation.</small>
+<small>Status reflects what is currently entered in clic_data.xlsx; blank values are shown as "Not started" and are awaiting confirmation.</small>

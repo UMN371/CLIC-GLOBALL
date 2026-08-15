@@ -3,17 +3,21 @@ title: "CLIC DCC — Progress Report"
 date: "`r format(Sys.Date(), '%d %B %Y')`"
 output:
   word_document:
-    toc: true
+    toc: false
+  pdf_document:
+    toc: false
+    latex_engine: xelatex
   html_document:
     theme: flatly
-    toc: true
-    toc_float: true
+    toc: false
+    toc_float: false
 params:
   data: NULL
   scope: "All countries"
   colors: NULL
   study: "Study"
   pages: NULL
+  total_studies: NULL
 ---
 
 ```{r setup, include=FALSE}
@@ -22,25 +26,58 @@ library(dplyr); library(ggplot2); library(knitr)
 d <- params$data
 PAL <- params$colors
 if (is.null(PAL)) PAL <- c("Complete"="#4CAF50","In Process"="#ffcc33","Incomplete"="#E0413B",
-         "N/A"="#1F1F1F","Unknown"="#D2D2D2")
+         "N/A"="#1F1F1F","Not started"="#D2D2D2")
 
-if (!is.null(d) && nrow(d) > 0) {
-  PAGES <- unique(as.character(d$page))
-} else {
-  PAGES <- character(0)
+SHORT <- c("Total Studies"="CLIC Total Studies","Genomic Pipeline"="Genomic Pipeline",
+           "Phenotype Data"="Phenotype Data","Epi Data"="Epi Data",
+           "IARC DCC Transfer"="IARC DCC","CoordinatingAnalysisCenter"="Coord. Center")
+disp <- function(p) ifelse(p %in% names(SHORT), unname(SHORT[p]), p)
+
+# Tracker study labels: / and & join separate studies (COG AALL0232 & AALL0434 = 2)
+split_tracker <- function(x){ x<-as.character(x)
+  vapply(x, function(v){ if(is.na(v)||trimws(v)=="") return(0L)
+    p <- strsplit(v, "[/&]")[[1]]; p <- p[nzchar(trimws(p))]; length(p) }, integer(1)) }
+
+# Classify each study (unit) into one overall status
+study_cat <- function(dd){
+  if (is.null(dd) || !nrow(dd)) return(dd[0,])
+  dd |> group_by(page, study) |>
+    summarise(non_na = sum(status!="N/A"),
+              done   = sum(status=="Complete"),
+              active = sum(status %in% c("Complete","In Process","Incomplete")),
+              .groups="drop") |>
+    mutate(units = split_tracker(study),
+           cat = case_when(non_na==0 ~ "Complete",
+                           done==non_na ~ "Complete",
+                           active==0 ~ "Not started",
+                           TRUE ~ "In progress"))
 }
+
+has_proj <- !is.null(d) && "project" %in% names(d)
+has_canc <- !is.null(d) && "cancer"  %in% names(d)
+PAGES <- if (!is.null(d) && nrow(d) > 0) unique(as.character(d$page)) else character(0)
+gl_studies <- if (has_proj) sum(split_tracker(unique(d$study[d$page=="Genomic Pipeline" & d$project=="GlobALL"]))) else NA
 ```
 
-**Scope:** `r params$scope`  
-**Studies:** `r length(unique(d$study))`  **·  Countries:** `r length(unique(d$country))`  
-**Overall complete:** `r round(mean(d$status=="Complete")*100)`%  **·  Still unknown:** `r round(mean(d$status=="Unknown")*100)`%
+<br>
 
-## Status mix by page
+**Scope:** `r params$scope`  
+**CLIC total studies:** `r if (!is.null(params$total_studies)) params$total_studies else length(unique(d$study))`  **·  Countries:** `r length(unique(d$country))`  
+**Overall step progress:** `r round(mean(d$status=="Complete")*100)`%  **·  Not started:** `r round(mean(d$status=="Not started")*100)`%
+`r if (has_proj) paste0("**·  GlobALL pipeline studies:** ", gl_studies)`
+
+> **Note:** Qc-ALL study status is to be determined (TBD).
+
+<br>
+
+## Status mix by tab
 
 ```{r}
 if (!is.null(d) && nrow(d) > 0) {
-  d |> count(page, status) |>
-    mutate(page = factor(page, levels = PAGES)) |>
+  dd <- d |> filter(page != "CoordinatingAnalysisCenter")
+  lv <- disp(setdiff(PAGES, "CoordinatingAnalysisCenter"))
+  dd |> count(page, status) |>
+    mutate(page = factor(disp(page), levels = lv)) |>
     ggplot(aes(page, n, fill = status)) +
     geom_col(width=.7) + scale_fill_manual(values = PAL, drop = FALSE) +
     labs(x=NULL, y="Cells", fill=NULL) +
@@ -50,22 +87,79 @@ if (!is.null(d) && nrow(d) > 0) {
 }
 ```
 
-## Completion by page
+<br>
+
+## Completion by tab (study units)
+
+Counts are **study units** (a study is counted once; combined entries like "COG AALL0232 & AALL0434" count as two). *Complete* = every milestone in that tab is done for the study; *In progress* = some but not all done; *Not started* = none started. 
 
 ```{r}
 if (!is.null(d) && nrow(d) > 0) {
-  d |> group_by(Page = factor(page, levels = PAGES)) |>
-    summarise(Complete=sum(status=="Complete"),
-              `In process`=sum(status=="In Process"),
-              Incomplete=sum(status=="Incomplete"),
-              `N/A`=sum(status=="N/A"),
-              Unknown=sum(status=="Unknown"),
-              `% complete`=round(mean(status=="Complete")*100), .groups="drop") |>
-    arrange(Page) |> kable()
+  tabs <- setdiff(PAGES, "CoordinatingAnalysisCenter")
+  ps <- study_cat(d[d$page %in% tabs, ])
+  base_tab <- ps |> group_by(page) |>
+    summarise(Studies=sum(units),
+              Complete=sum(units[cat=="Complete"]),
+              `In progress`=sum(units[cat=="In progress"]),
+              `Not started`=sum(units[cat=="Not started"]), .groups="drop")
+  base_tab$Tab <- disp(base_tab$page); base_tab$page <- NULL
+  rows <- base_tab[, c("Tab","Studies","Complete","In progress","Not started")]
+  if (has_proj && any(d$page=="Genomic Pipeline" & d$project=="GlobALL")) {
+    g <- study_cat(d[d$page=="Genomic Pipeline" & d$project=="GlobALL", ])
+    grow <- data.frame(Tab="GlobALL Pipeline", Studies=sum(g$units),
+      Complete=sum(g$units[g$cat=="Complete"]),
+      `In progress`=sum(g$units[g$cat=="In progress"]),
+      `Not started`=sum(g$units[g$cat=="Not started"]), check.names=FALSE)
+    rows <- rbind(rows, grow)
+  }
+  ord <- c(); for (p in tabs) { ord <- c(ord, disp(p)); if (p=="Genomic Pipeline") ord <- c(ord, "GlobALL Pipeline") }
+  rows$Tab <- factor(rows$Tab, levels=ord); rows <- rows[order(rows$Tab), ]
+  kable(rows, row.names = FALSE)
 } else {
   cat("No data available to display metrics table.\n")
 }
 ```
+
+<br>
+
+## GlobALL pipeline
+
+```{r results='asis'}
+if (has_proj && any(d$page=="Genomic Pipeline")) {
+  gp  <- d[d$page=="Genomic Pipeline", ]
+  gl  <- gp[gp$project=="GlobALL", ]
+  tab <- data.frame(
+    Population   = c("All genomic studies", "GlobALL project only"),
+    Studies      = c(sum(split_tracker(unique(gp$study))), sum(split_tracker(unique(gl$study)))),
+    `Step progress` = c(paste0(round(mean(gp$status=="Complete")*100),"%"),
+                        if (nrow(gl)) paste0(round(mean(gl$status=="Complete")*100),"%") else "—"),
+    check.names  = FALSE)
+  print(kable(tab, row.names = FALSE))
+} else {
+  cat("*No Project column in the current data — GlobALL breakdown unavailable.*\n\n")
+}
+```
+
+<br>
+
+## Cancer types (genomic studies)
+
+```{r results='asis'}
+if (has_canc && any(d$page=="Genomic Pipeline")) {
+  st <- unique(d[d$page=="Genomic Pipeline", c("study","cancer")])
+  types <- trimws(unlist(strsplit(st$cancer[nzchar(st$cancer)], ",")))
+  types <- types[nzchar(types)]
+  if (length(types)) {
+    ct <- as.data.frame(table(`Cancer type`=types), stringsAsFactors=FALSE)
+    ct <- ct[order(-ct$Freq), ]; names(ct)[2] <- "Studies"
+    print(kable(ct, row.names = FALSE))
+  } else cat("*No cancer-type data in the current scope.*\n\n")
+} else {
+  cat("*No cancer-type data available.*\n\n")
+}
+```
+
+<br>
 
 ## Flagged studies (Notes)
 
@@ -84,4 +178,4 @@ if (!is.null(d) && nrow(d) > 0) {
 
 ---
 
-<small>Generated from the CLIC DCC Global Progress Dashboard. Status reflects whatever has been entered in <code>clic_data.xlsx</code>; blank/Unknown cells are awaiting confirmation.</small>
+<small>Generated from the CLIC DCC Progress Dashboard.</small>
