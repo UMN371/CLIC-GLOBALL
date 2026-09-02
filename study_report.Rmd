@@ -56,7 +56,6 @@ if (is.null(d) || !nrow(d)) {
     if (length(notes)) cat("\n\n**Notes:** ", paste(notes, collapse = "; "), "\n\n", sep = "")
     cat("\n")
   }
-  cat("\n> **Note:** Qc-ALL study status is to be determined (TBD).\n\n")
 }
 ```
 

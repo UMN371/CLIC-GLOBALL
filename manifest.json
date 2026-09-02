@@ -2136,10 +2136,10 @@
   },
   "files": {
     "app.R": {
-      "checksum": "13f8d8baf3de183caa75a3eb5504877f"
+      "checksum": "e35c1005eb9831281dd3b0c60c5648d6"
     },
     "clic_data.xlsx": {
-      "checksum": "522d125d141ee493d484bd5b3d45048f"
+      "checksum": "9ab8074911eb621e32008ca003c671c2"
     },
     "clic_logo.png": {
       "checksum": "4a22270a21a7760bb3a9da1d63934465"
@@ -2154,7 +2154,7 @@
       "checksum": "26ed30b2beb8d52fbca17676a5777099"
     },
     "report.Rmd": {
-      "checksum": "1d4c92b39e514e1acbd5daba8bf96522"
+      "checksum": "a0350b44ec543974c5488a7a21dcb8c8"
     },
     "run.R": {
       "checksum": "462a791cdd7276a26ca2ae772fc9d686"
@@ -2163,7 +2163,7 @@
       "checksum": "7dabf4e4e36ea77ae0a21ca98411765f"
     },
     "study_report.Rmd": {
-      "checksum": "1764e5e0c2851f8bf9760b5ebe60b955"
+      "checksum": "d6ffab051c5deac65674d0e73f490159"
     }
   },
   "users": null

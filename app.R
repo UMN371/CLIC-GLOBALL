@@ -325,17 +325,14 @@ home_tab <- nav_panel("Home", value="Home",
     card(card_header("Tabs at a glance"), uiOutput("home_overview")),
     card(card_header("Total studies by tab"), uiOutput("home_kpis"))))
 
-qc_note_ui <- function() div(style="background:#FFF7DB;border:1px solid #F0E1A8;border-radius:8px;padding:8px 12px;font-size:12.5px;color:#8C6D1F;margin:6px 0;",
-  HTML("<b>Note:</b> Qc-ALL study status is to be determined (TBD)."))
-
 genomic_all_tab <- nav_panel("Genomic Pipeline", value="GenomicAll", card(full_screen=TRUE,
   card_header("Genomic Pipeline \u2014 all studies (use the boxes under each status column to filter)"),
-  legend_ui, qc_note_ui(), tags$hr(style="margin:8px 0;border-color:#E1E8E4;"),
+  legend_ui, tags$hr(style="margin:8px 0;border-color:#E1E8E4;"),
   DTOutput("trk_genomic_all")))
 
 globall_tab <- nav_panel("GlobALL Pipeline", value="GlobALLPipe", card(full_screen=TRUE,
   card_header("GlobALL Pipeline \u2014 GlobALL project studies (use the boxes under each status column to filter)"),
-  legend_ui, qc_note_ui(), tags$hr(style="margin:8px 0;border-color:#E1E8E4;"),
+  legend_ui, tags$hr(style="margin:8px 0;border-color:#E1E8E4;"),
   DTOutput("trk_globall")))
 
 summary_tab <- nav_panel("Overall Summary", value="Summary",
