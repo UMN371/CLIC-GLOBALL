@@ -55,6 +55,9 @@ CONT <- c(Australia="Oceania","New Zealand"="Oceania",Brazil="South America",Can
  "United Kingdom"="Europe",UK="Europe",Japan="Asia","South Korea"="Asia",Taiwan="Asia")
 continent_of <- function(x){ c<-CONT[trimws(x)]; ifelse(is.na(c),"Other",unname(c)) }
 
+# Display relabels for milestone (status) columns
+MILE_RELABEL <- c("CA-CO Assignment"="CA-CO Matching")
+
 COUNTRY_FIX <- c("USA"="United States","U.S.A."="United States","US"="United States",
                  "U.S."="United States","UK"="United Kingdom","U.K."="United Kingdom",
                  "Korea"="South Korea")
@@ -81,18 +84,21 @@ ingest_tracker <- function(sheet){
   label_col <- lc[lc%in%nm][1]; if(is.na(label_col)) label_col <- setdiff(nm,c(miles,notes_col))[1]
   inst_cands <- c("Contributing Center","Analysis Center")
   inst_col <- inst_cands[inst_cands %in% nm & inst_cands != label_col][1]
+  ac_col   <- if("Analysis Center" %in% nm) "Analysis Center" else NA
   proj_col <- if("Project"%in%nm) "Project" else NA
   canc_col <- nm[trimws(nm) %in% c("Cancer Types","Cancer Type","Tumor type(s)")][1]
   df$.ord <- seq_len(nrow(df)); df$.label <- as.character(df[[label_col]])
   df$.group <- if(!is.na(group_col)) canon_country(df[[group_col]]) else ""
   df$.inst  <- if(!is.na(inst_col)) trimws(as.character(df[[inst_col]])) else ""
+  df$.analysis <- if(!is.na(ac_col)) ifelse(is.na(df[[ac_col]]),"",trimws(as.character(df[[ac_col]]))) else ""
   df$.project <- if(!is.na(proj_col)) ifelse(is.na(df[[proj_col]]),"",trimws(as.character(df[[proj_col]]))) else ""
   df$.cancer  <- if(!is.na(canc_col)) ifelse(is.na(df[[canc_col]]),"",trimws(as.character(df[[canc_col]]))) else ""
   df$.notes <- if(length(notes_col)) ifelse(is.na(df[[notes_col]]),"",as.character(df[[notes_col]])) else ""
-  df[, c(".ord",".label",".group",".inst",".project",".cancer",".notes",miles)] |>
+  df[, c(".ord",".label",".group",".inst",".analysis",".project",".cancer",".notes",miles)] |>
     tidyr::pivot_longer(all_of(miles), names_to="milestone", values_to="raw") |>
-    dplyr::mutate(page=sheet, status=norm_status(raw), col_order=match(milestone,miles)) |>
-    dplyr::transmute(page, ord=.ord, group=.group, inst=.inst, project=.project, cancer=.cancer, label=.label, milestone, col_order, status, notes=.notes)
+    dplyr::mutate(page=sheet, status=norm_status(raw), col_order=match(milestone,miles),
+                  milestone=ifelse(trimws(milestone) %in% names(MILE_RELABEL), unname(MILE_RELABEL[trimws(milestone)]), milestone)) |>
+    dplyr::transmute(page, ord=.ord, group=.group, inst=.inst, analysis=.analysis, project=.project, cancer=.cancer, label=.label, milestone, col_order, status, notes=.notes)
 }
 
 TRACKERS <- list(); REGISTRY <- list()
@@ -119,6 +125,7 @@ country_choices <- sort(unique(c(clic$group,
 country_choices <- country_choices[country_choices!="" & !is.na(country_choices)]
 study_choices <- sort(unique(clic$label))
 inst_choices <- sort(unique(clic$inst)); inst_choices <- inst_choices[inst_choices!="" & !is.na(inst_choices)]
+analysis_choices <- sort(unique(clic$analysis)); analysis_choices <- analysis_choices[analysis_choices!="" & !is.na(analysis_choices)]
 SUMMARY_PAGES <- intersect(c("Genomic Pipeline","Phenotype Data","Epi Data","IARC DCC Transfer"), TRK_SHEETS)
 study_sum_choices <- sort(unique(clic$label[clic$page %in% SUMMARY_PAGES]))
 
@@ -261,11 +268,13 @@ render_tracker_dt <- function(d, shape="oval"){
   miles <- d |> distinct(milestone,col_order) |> arrange(col_order) |> pull(milestone)
   has_group <- any(nzchar(d$group)); has_inst <- any(nzchar(d$inst)); shownotes <- any(nzchar(d$notes))
   has_canc <- "cancer" %in% names(d) && any(nzchar(d$cancer))
+  has_anal <- "analysis" %in% names(d) && any(nzchar(d$analysis)) && !all(d$analysis==d$label)
   dd <- d |> mutate(status=as.character(status))
-  wide <- tidyr::pivot_wider(dd, id_cols=c(ord,group,inst,cancer,label,notes),
+  wide <- tidyr::pivot_wider(dd, id_cols=c(ord,group,analysis,inst,cancer,label,notes),
             names_from=milestone, values_from=status, values_fn=function(x) x[1]) |> arrange(ord)
   cols <- list()
   if(has_group) cols[["Country"]] <- wide$group
+  if(has_anal)  cols[["Analysis Center"]] <- wide$analysis
   if(has_inst)  cols[["Institution"]] <- wide$inst
   cols[["Study / Dataset"]] <- wide$label
   if(has_canc)  cols[["Cancer Types"]] <- wide$cancer
@@ -355,6 +364,7 @@ study_tab <- nav_panel("Study Summary", value="StudySummary",
   uiOutput("study_view"))
 
 sidebar_ui <- sidebar(width=255, title="Filters",
+  selectizeInput("analyses","Analysis Center", multiple=TRUE, choices=analysis_choices, options=list(placeholder="All analysis centers")),
   selectizeInput("continents","Continent", multiple=TRUE, choices=cont_choices, options=list(placeholder="All continents")),
   selectizeInput("countries","Country", multiple=TRUE, choices=country_choices, options=list(placeholder="All countries")),
   selectizeInput("insts","Institution", multiple=TRUE, choices=inst_choices, options=list(placeholder="All institutions")),
@@ -379,7 +389,7 @@ ui <- do.call(page_navbar, c(
     sidebar=sidebar_ui),
   list(home_tab, summary_tab, study_tab),
   lapply(intersect(c("Total Studies"), SHEETS), make_tab),
-  list(genomic_all_tab, globall_tab),
+  list(globall_tab),
   lapply(intersect(c("Phenotype Data","Epi Data","IARC DCC Transfer"), SHEETS), make_tab),
   lapply(OTHER_SHEETS, make_tab),
   lapply(TAIL_SHEETS, make_tab)))
@@ -387,6 +397,7 @@ ui <- do.call(page_navbar, c(
 # ---- SERVER ----
 server <- function(input, output, session){
   base <- reactive({ d<-clic
+    if(length(input$analyses))   d<-d[d$analysis %in% input$analyses,]
     if(length(input$continents)) d<-d[d$continent %in% input$continents,]
     if(length(input$countries))  d<-d[trimws(d$group) %in% input$countries,]
     if(length(input$insts))      d<-d[d$inst %in% input$insts,]
