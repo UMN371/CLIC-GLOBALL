@@ -29,7 +29,7 @@ BLUE<-"#78B4CC"; TEAL_D<-"#3E8E78"; GOLD<-"#ffcc33"; SLATE<-"#505A5A"; INK<-"#2A
 
 ID_EXACT <- c("Study membership","Continent","Location","Study name","Tumor type(s)",
  "Year of Study","Year CLIC Membership Started","DNA Available","Study PI 1 Name",
- "Analysis Center","Country","Type","Contributing Center","Study/Dataset","Cancer Type","Cancer Types","Project","Center Name","Study")
+ "Analysis Center","Country","Type","Contributing Center","Study/Dataset","Cancer Type","Cancer Types","Project","Proposed Cases","Center Name","Study")
 is_id <- function(n){ n<-trimws(n); n %in% ID_EXACT || grepl("Number of|Extension", n) }
 
 canon_map <- function(s){              # s = lowercased trimmed scalar
@@ -87,18 +87,20 @@ ingest_tracker <- function(sheet){
   ac_col   <- if("Analysis Center" %in% nm) "Analysis Center" else NA
   proj_col <- if("Project"%in%nm) "Project" else NA
   canc_col <- nm[trimws(nm) %in% c("Cancer Types","Cancer Type","Tumor type(s)")][1]
+  prop_col <- if("Proposed Cases" %in% nm) "Proposed Cases" else NA
   df$.ord <- seq_len(nrow(df)); df$.label <- as.character(df[[label_col]])
   df$.group <- if(!is.na(group_col)) canon_country(df[[group_col]]) else ""
   df$.inst  <- if(!is.na(inst_col)) trimws(as.character(df[[inst_col]])) else ""
   df$.analysis <- if(!is.na(ac_col)) ifelse(is.na(df[[ac_col]]),"",trimws(as.character(df[[ac_col]]))) else ""
   df$.project <- if(!is.na(proj_col)) ifelse(is.na(df[[proj_col]]),"",trimws(as.character(df[[proj_col]]))) else ""
   df$.cancer  <- if(!is.na(canc_col)) ifelse(is.na(df[[canc_col]]),"",trimws(as.character(df[[canc_col]]))) else ""
+  df$.proposed <- if(!is.na(prop_col)) ifelse(is.na(df[[prop_col]]),"",prettyNum(df[[prop_col]],big.mark=",")) else ""
   df$.notes <- if(length(notes_col)) ifelse(is.na(df[[notes_col]]),"",as.character(df[[notes_col]])) else ""
-  df[, c(".ord",".label",".group",".inst",".analysis",".project",".cancer",".notes",miles)] |>
+  df[, c(".ord",".label",".group",".inst",".analysis",".project",".cancer",".proposed",".notes",miles)] |>
     tidyr::pivot_longer(all_of(miles), names_to="milestone", values_to="raw") |>
     dplyr::mutate(page=sheet, status=norm_status(raw), col_order=match(milestone,miles),
                   milestone=ifelse(trimws(milestone) %in% names(MILE_RELABEL), unname(MILE_RELABEL[trimws(milestone)]), milestone)) |>
-    dplyr::transmute(page, ord=.ord, group=.group, inst=.inst, analysis=.analysis, project=.project, cancer=.cancer, label=.label, milestone, col_order, status, notes=.notes)
+    dplyr::transmute(page, ord=.ord, group=.group, inst=.inst, analysis=.analysis, project=.project, cancer=.cancer, proposed=.proposed, label=.label, milestone, col_order, status, notes=.notes)
 }
 
 TRACKERS <- list(); REGISTRY <- list()
@@ -269,8 +271,9 @@ render_tracker_dt <- function(d, shape="oval"){
   has_group <- any(nzchar(d$group)); has_inst <- any(nzchar(d$inst)); shownotes <- any(nzchar(d$notes))
   has_canc <- "cancer" %in% names(d) && any(nzchar(d$cancer))
   has_anal <- "analysis" %in% names(d) && any(nzchar(d$analysis)) && !all(d$analysis==d$label)
+  has_prop <- "proposed" %in% names(d) && any(nzchar(d$proposed))
   dd <- d |> mutate(status=as.character(status))
-  wide <- tidyr::pivot_wider(dd, id_cols=c(ord,group,analysis,inst,cancer,label,notes),
+  wide <- tidyr::pivot_wider(dd, id_cols=c(ord,group,analysis,inst,cancer,proposed,label,notes),
             names_from=milestone, values_from=status, values_fn=function(x) x[1]) |> arrange(ord)
   cols <- list()
   if(has_group) cols[["Country"]] <- wide$group
@@ -278,6 +281,7 @@ render_tracker_dt <- function(d, shape="oval"){
   if(has_inst)  cols[["Institution"]] <- wide$inst
   cols[["Study / Dataset"]] <- wide$label
   if(has_canc)  cols[["Cancer Types"]] <- wide$cancer
+  if(has_prop)  cols[["Proposed Cases"]] <- wide$proposed
   df <- data.frame(cols, check.names=FALSE, stringsAsFactors=FALSE)
   for(m in miles){ lv <- intersect(status_levels, unique(wide[[m]])); df[[m]] <- factor(wide[[m]], levels=lv) }
   if(shownotes) df[["Notes"]] <- wide$notes
