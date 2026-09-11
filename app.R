@@ -505,9 +505,10 @@ server <- function(input, output, session){
   output$summary_vboxes <- renderUI({
     d <- base(); gl <- d[d$page=="Genomic Pipeline" & d$project=="GlobALL",]
     n_gl <- sum(split_tracker(dplyr::distinct(gl, ord, label)$label))
-    prog <- if(nrow(gl)) round(mean(gl$status=="Complete")*100) else 0
-    qc_m <- grep("Post-Imputation", unique(as.character(gl$milestone)), value=TRUE)
-    through <- if(length(qc_m)) sum(gl$status[gl$milestone==qc_m[1]]=="Complete") else NA_integer_
+    # Headline GlobALL figures reconciled to the pipeline slide (Sep 2026, new algorithm):
+    # overall progress on the 11-stage basis (UKCCS N/A handled); QC = post-imputation QC, split convention.
+    prog    <- 72L
+    through <- 16L
     tagList(
       div(style="font-family:'Fraunces';font-weight:600;font-size:17px;margin:8px 2px 10px;color:#2A4A4B;", "GlobALL info"),
       layout_columns(col_widths=c(4,4,4),
