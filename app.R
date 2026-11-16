@@ -1,4 +1,3 @@
-
 library(shiny); library(bslib); library(dplyr); library(tidyr)
 library(ggplot2); library(DT); library(htmltools); library(readxl)
 
@@ -28,8 +27,8 @@ LEGLAB    <- c("Complete"="Complete / Yes","In Process"="In process / Planned",
 BLUE<-"#78B4CC"; TEAL_D<-"#3E8E78"; GOLD<-"#ffcc33"; SLATE<-"#505A5A"; INK<-"#2A4A4B"; GOLD_INK<-"#8C6D1F"
 
 ID_EXACT <- c("Study membership","Continent","Location","Study name","Tumor type(s)",
- "Year of Study","Year CLIC Membership Started","DNA Available","Study PI 1 Name",
- "Analysis Center","Country","Type","Contributing Center","Study/Dataset","Cancer Type","Cancer Types","Project","Proposed Cases","Center Name","Study")
+              "Year of Study","Year CLIC Membership Started","DNA Available","Study PI 1 Name",
+              "Analysis Center","Country","Type","Contributing Center","Study/Dataset","Cancer Type","Cancer Types","Project","Proposed Cases","Center Name","Study")
 is_id <- function(n){ n<-trimws(n); n %in% ID_EXACT || grepl("Number of|Extension", n) }
 
 canon_map <- function(s){              # s = lowercased trimmed scalar
@@ -49,10 +48,10 @@ norm_status <- function(x){
 }
 
 CONT <- c(Australia="Oceania","New Zealand"="Oceania",Brazil="South America",Canada="North America",
- "Costa Rica"="Central America",Guatemala="Central America",Mexico="North America",USA="North America",
- "United States"="North America",Denmark="Europe",Egypt="Africa",Finland="Europe",France="Europe",
- Germany="Europe",Greece="Europe",Italy="Europe",Spain="Europe",Sweden="Europe",
- "United Kingdom"="Europe",UK="Europe",Japan="Asia","South Korea"="Asia",Taiwan="Asia")
+          "Costa Rica"="Central America",Guatemala="Central America",Mexico="North America",USA="North America",
+          "United States"="North America",Denmark="Europe",Egypt="Africa",Finland="Europe",France="Europe",
+          Germany="Europe",Greece="Europe",Italy="Europe",Spain="Europe",Sweden="Europe",
+          "United Kingdom"="Europe",UK="Europe",Japan="Asia","South Korea"="Asia",Taiwan="Asia")
 continent_of <- function(x){ c<-CONT[trimws(x)]; ifelse(is.na(c),"Other",unname(c)) }
 
 # Display relabels for milestone (status) columns
@@ -65,8 +64,8 @@ canon_country <- function(x){ x<-trimws(as.character(x)); f<-COUNTRY_FIX[x]; ife
 
 SHEETS <- readxl::excel_sheets(XLSX)
 SHORT <- c("Total Studies"="CLIC Total Studies","CoordinatingAnalysisCenter"="Coord. Center",
- "Genomic Pipeline"="Genomic Pipeline","Phenotype Data"="Phenotype Data","Epi Data"="Epi Data",
- "IARC DCC Transfer"="IARC DCC")
+           "Genomic Pipeline"="Genomic Pipeline","Phenotype Data"="Phenotype Data","Phenotype Data Main"="Phenotype Data","Epi Data"="Epi Data",
+           "IARC DCC Transfer"="IARC DCC")
 short_title <- function(s) if(!is.na(SHORT[s])) unname(SHORT[s]) else s
 short_title_vec <- function(x) vapply(as.character(x), short_title, character(1))
 read_sheet <- function(s) as.data.frame(readxl::read_excel(XLSX, sheet=s), check.names=FALSE)
@@ -92,7 +91,8 @@ ingest_tracker <- function(sheet){
   df$.group <- if(!is.na(group_col)) canon_country(df[[group_col]]) else ""
   df$.inst  <- if(!is.na(inst_col)) trimws(as.character(df[[inst_col]])) else ""
   df$.analysis <- if(!is.na(ac_col)) ifelse(is.na(df[[ac_col]]),"",trimws(as.character(df[[ac_col]]))) else ""
-  df$.project <- if(!is.na(proj_col)) ifelse(is.na(df[[proj_col]]),"",trimws(as.character(df[[proj_col]]))) else ""
+  df$.project <- if(!is.na(proj_col)) { pj <- trimws(as.character(df[[proj_col]]))
+  ifelse(is.na(pj) | pj=="" | tolower(pj)=="none", "Other", pj) } else ""
   df$.cancer  <- if(!is.na(canc_col)) ifelse(is.na(df[[canc_col]]),"",trimws(as.character(df[[canc_col]]))) else ""
   df$.proposed <- if(!is.na(prop_col)) ifelse(is.na(df[[prop_col]]),"",prettyNum(df[[prop_col]],big.mark=",")) else ""
   df$.notes <- if(length(notes_col)) ifelse(is.na(df[[notes_col]]),"",as.character(df[[notes_col]])) else ""
@@ -121,49 +121,66 @@ trunc_lab <- function(s,n=26) if(nchar(s)>n) paste0(substr(s,1,n-1),"\u2026") el
 
 reg_country_col <- function(df) intersect(c("Country","Location"), names(df))[1]
 cont_choices <- sort(unique(c(clic$continent,
-  unlist(lapply(REGISTRY, function(d) if("Continent"%in%names(d)) trimws(d$Continent) else NULL)))))
+                              unlist(lapply(REGISTRY, function(d) if("Continent"%in%names(d)) trimws(d$Continent) else NULL)))))
 country_choices <- sort(unique(c(clic$group,
-  unlist(lapply(REGISTRY, function(d){ cc<-reg_country_col(d); if(is.na(cc)) NULL else canon_country(d[[cc]]) })))))
+                                 unlist(lapply(REGISTRY, function(d){ cc<-reg_country_col(d); if(is.na(cc)) NULL else canon_country(d[[cc]]) })))))
 country_choices <- country_choices[country_choices!="" & !is.na(country_choices)]
 study_choices <- sort(unique(clic$label))
 inst_choices <- sort(unique(clic$inst)); inst_choices <- inst_choices[inst_choices!="" & !is.na(inst_choices)]
 analysis_choices <- sort(unique(clic$analysis)); analysis_choices <- analysis_choices[analysis_choices!="" & !is.na(analysis_choices)]
-SUMMARY_PAGES <- intersect(c("Genomic Pipeline","Phenotype Data","Epi Data","IARC DCC Transfer"), TRK_SHEETS)
+project_choices <- unique(clic$project[!is.na(clic$project) & nzchar(clic$project)])
+project_choices <- c(intersect("GlobALL", project_choices), sort(setdiff(project_choices, "GlobALL")))
+SUMMARY_PAGES <- intersect(c("Genomic Pipeline","Phenotype Data","Phenotype Data Main","Epi Data","IARC DCC Transfer"), TRK_SHEETS)
 study_sum_choices <- sort(unique(clic$label[clic$page %in% SUMMARY_PAGES]))
 
 # Per-sheet status-marker shape: oval (default) | dot | check
-SHAPE <- c("Phenotype Data"="dot","Epi Data"="dot","CoordinatingAnalysisCenter"="check")
+SHAPE <- c("Phenotype Data"="dot","Phenotype Data Main"="dot","Epi Data"="dot","CoordinatingAnalysisCenter"="check")
 shape_of <- function(s){ v<-SHAPE[s]; if(is.na(v)) "oval" else unname(v) }
 
 # One-sentence description per tab (for the Home overview)
 TAB_DESC <- c(
- "Total Studies"="Master registry of every CLIC study \u2014 membership, location, tumour type and PI.",
- "Genomic Pipeline"="Genomic processing milestones, from DTUA receipt through imputation, QC and analytic completion.",
- "Phenotype Data"="Phenotype data transfer and harmonisation status for each contributing study.",
- "Epi Data"="Epidemiological data availability and transfer status for each study.",
- "IARC DCC Transfer"="Data transfer milestones between contributing centres and the IARC Data Coordinating Centre.",
- "CoordinatingAnalysisCenter"="Roles and milestones for the coordinating and analysis centres.")
+  "Total Studies"="Master registry of every CLIC study \u2014 membership, location, tumour type and PI.",
+  "Genomic Pipeline"="Genomic processing milestones, from DTUA receipt through imputation, QC and analytic completion.",
+  "Phenotype Data"="Phenotype data transfer and harmonisation status for each contributing study.",
+  "Phenotype Data Main"="Phenotype data transfer and harmonisation status for each contributing study.",
+  "Epi Data"="Epidemiological data availability and transfer status for each study.",
+  "IARC DCC Transfer"="Data transfer milestones between contributing centres and the IARC Data Coordinating Centre.",
+  "CoordinatingAnalysisCenter"="Roles and milestones for the coordinating and analysis centres.")
 tab_desc <- function(s){ d<-TAB_DESC[s]; if(is.na(d)) "" else unname(d) }
 
 mix_div <- function(cc){ tot<-sum(cc$n); if(!tot) return(NULL)
-  div(class="mix", lapply(seq_len(nrow(cc)), function(i)
-    span(style=sprintf("width:%.1f%%;background:%s;", cc$n[i]/tot*100, scolor(cc$status[i])),
-         title=sprintf("%s: %d", as.character(cc$status[i]), cc$n[i])))) }
+div(class="mix", lapply(seq_len(nrow(cc)), function(i)
+  span(style=sprintf("width:%.1f%%;background:%s;", cc$n[i]/tot*100, scolor(cc$status[i])),
+       title=sprintf("%s: %d", as.character(cc$status[i]), cc$n[i])))) }
 
 # Count studies treating any "/" in a name as separate studies (e.g. AUS-ALL/CBT = 2).
 split_count <- function(x){ x<-as.character(x)
-  vapply(x, function(v) if(is.na(v)||trimws(v)=="") 0L else length(strsplit(v,"/",fixed=TRUE)[[1]]), integer(1)) }
+vapply(x, function(v) if(is.na(v)||trimws(v)=="") 0L else length(strsplit(v,"/",fixed=TRUE)[[1]]), integer(1)) }
 # Tracker study labels use short codes where / and & join separate studies
 # (e.g. "COG AALL0232 & AALL0434" = 2, "ADELE/ELECTRE/ESCALE/ESTELLE" = 4).
 # NB: not comma - some tracker names contain a descriptive comma (e.g. "São Paulo, Bra-SP").
 split_tracker <- function(x){ x<-as.character(x)
-  vapply(x, function(v){ if(is.na(v)||trimws(v)=="") return(0L)
-    p <- strsplit(v, "[/&]")[[1]]; p <- p[nzchar(trimws(p))]; length(p) }, integer(1)) }
+vapply(x, function(v){ if(is.na(v)||trimws(v)=="") return(0L)
+  p <- strsplit(v, "[/&]")[[1]]; p <- p[nzchar(trimws(p))]; length(p) }, integer(1)) }
+# Study units for a tracker page. On the genomic / phenotype / epi sheets a comma also joins
+# separate studies ("COG AALL19B1, AALL0232, AALL0434" = 3); on IARC DCC it does not
+# ("São Paulo, Bra-SP" is one study).
+COMMA_PAGES <- c("Genomic Pipeline","Phenotype Data","Phenotype Data Main","Epi Data")
+study_units <- function(labels, page){ labels <- as.character(labels)
+pat <- if(length(page) && page[1] %in% COMMA_PAGES) "[/&,]" else "[/&]"
+sum(vapply(labels, function(v){ if(is.na(v)||trimws(v)=="") return(0L)
+  p <- strsplit(v, pat)[[1]]; length(p[nzchar(trimws(p))]) }, integer(1))) }
+# GlobALL headline progress: Complete / applicable cells across the pipeline stages.
+# "Aim 3 EPI Data Availability" is not a pipeline stage, and Not Applicable cells are not counted.
+pipeline_progress <- function(dp){
+  dp <- dp[!grepl("^\\s*Aim 3", dp$milestone) & as.character(dp$status)!="N/A",]
+  if(!nrow(dp)) return(0L)
+  round(mean(as.character(dp$status)=="Complete")*100) }
 reg_study_col <- function(df) intersect(c("Study name","Study","Study/Dataset","Study membership"), names(df))[1]
 
 # ---- styles ----
 app_theme <- bs_theme(version=5, bg="#F5F8F6", fg=INK, primary=TEAL_D,
-  base_font=font_google("IBM Plex Sans"), heading_font=font_google("Fraunces"), "navbar-bg"="#FFFFFF")
+                      base_font=font_google("IBM Plex Sans"), heading_font=font_google("Fraunces"), "navbar-bg"="#FFFFFF")
 css <- HTML(sprintf("
   .clic-tbl{border-collapse:collapse;width:100%%;font-family:'IBM Plex Sans',sans-serif;}
   .clic-tbl thead th{vertical-align:bottom;padding:8px 5px;border-bottom:2px solid %1$s;}
@@ -213,16 +230,16 @@ css <- HTML(sprintf("
 
 colors_json <- paste0("{", paste(sprintf('"%s":"%s"', names(STATUS_COLORS), unname(STATUS_COLORS)), collapse=","), "}")
 mark_js <- paste0(
- "window.CLIC_COLORS=", colors_json, ";",
- "window.clicMark=function(shape){return function(data,type,row){",
- "if(type!=='display') return data;",
- "if(data===null||data===undefined||data==='') return '';",
- "var c=window.CLIC_COLORS[data]||'#D2D2D2';",
- "if(shape==='check'){return '<span class=\"chk\" style=\"color:'+c+'\" title=\"'+data+'\">\\u2713</span>';}",
- "var cls=(shape==='dot')?'dot':'ov';",
- "return '<span class=\"'+cls+'\" style=\"background:'+c+';display:inline-block\" title=\"'+data+'\"></span>';",
- "};};",
- "document.addEventListener('DOMContentLoaded',function(){function p(){document.querySelectorAll('.navbar-nav .nav-link').forEach(function(a){var t=(a.textContent||'').trim();if(t==='Genomic Pipeline'||t==='GlobALL Pipeline'){a.style.setProperty('color','#E6A700','important');a.style.fontWeight='700';}});}p();setTimeout(p,300);setTimeout(p,1200);});")
+  "window.CLIC_COLORS=", colors_json, ";",
+  "window.clicMark=function(shape){return function(data,type,row){",
+  "if(type!=='display') return data;",
+  "if(data===null||data===undefined||data==='') return '';",
+  "var c=window.CLIC_COLORS[data]||'#D2D2D2';",
+  "if(shape==='check'){return '<span class=\"chk\" style=\"color:'+c+'\" title=\"'+data+'\">\\u2713</span>';}",
+  "var cls=(shape==='dot')?'dot':'ov';",
+  "return '<span class=\"'+cls+'\" style=\"background:'+c+';display:inline-block\" title=\"'+data+'\"></span>';",
+  "};};",
+  "document.addEventListener('DOMContentLoaded',function(){function p(){document.querySelectorAll('.navbar-nav .nav-link').forEach(function(a){var t=(a.textContent||'').trim();if(t==='Genomic Pipeline'||t==='GlobALL Pipeline'){a.style.setProperty('color','#E6A700','important');a.style.fontWeight='700';}});}p();setTimeout(p,300);setTimeout(p,1200);});")
 
 legend_ui <- div(class="legend2", lapply(status_levels, function(s)
   div(class="it", span(class="ov", style=paste0("background:",scolor(s),";"), title=s), trunc_lab(leglab(s)))))
@@ -254,27 +271,28 @@ render_oval <- function(d, shape="oval"){
     sr <- d[d$ord==o,]; sr <- sr[match(miles,sr$milestone),]
     new <- has_group && grp!=prev; prev<<-grp
     tags$tr(class=if(new)"grp" else "",
-      if(has_group) tags$td(class="country", if(new) grp else "") else NULL,
-      if(has_inst)  tags$td(class="inst", inst) else NULL,
-      tags$td(class="study", lab),
-      lapply(seq_along(miles), function(j){ s<-as.character(sr$status[j]); if(is.na(s))s<-"Unknown"
-        tags$td(class="cell", status_mark(s, shape, paste0(miles[j]," \u2014 ", leglab(s))))}),
-      tags$td(class="notes", note))
+            if(has_group) tags$td(class="country", if(new) grp else "") else NULL,
+            if(has_inst)  tags$td(class="inst", inst) else NULL,
+            tags$td(class="study", lab),
+            lapply(seq_along(miles), function(j){ s<-as.character(sr$status[j]); if(is.na(s))s<-"Unknown"
+            tags$td(class="cell", status_mark(s, shape, paste0(miles[j]," \u2014 ", leglab(s))))}),
+            tags$td(class="notes", note))
   })
   div(class="scrollx", tags$table(class="clic-tbl", tags$thead(header), tags$tbody(body)))
 }
 
 render_tracker_dt <- function(d, shape="oval"){
   if(!nrow(d)) return(DT::datatable(data.frame(` `="No rows match the filter.", check.names=FALSE),
-                                     rownames=FALSE, options=list(dom='t')))
+                                    rownames=FALSE, options=list(dom='t')))
   miles <- d |> distinct(milestone,col_order) |> arrange(col_order) |> pull(milestone)
   has_group <- any(nzchar(d$group)); has_inst <- any(nzchar(d$inst)); shownotes <- any(nzchar(d$notes))
   has_canc <- "cancer" %in% names(d) && any(nzchar(d$cancer))
   has_anal <- "analysis" %in% names(d) && any(nzchar(d$analysis)) && !all(d$analysis==d$label)
   has_prop <- "proposed" %in% names(d) && any(nzchar(d$proposed))
+  has_proj <- "project" %in% names(d) && length(unique(d$project[nzchar(d$project)]))>1
   dd <- d |> mutate(status=as.character(status))
-  wide <- tidyr::pivot_wider(dd, id_cols=c(ord,group,analysis,inst,cancer,proposed,label,notes),
-            names_from=milestone, values_from=status, values_fn=function(x) x[1]) |> arrange(ord)
+  wide <- tidyr::pivot_wider(dd, id_cols=c(ord,group,analysis,inst,cancer,proposed,project,label,notes),
+                             names_from=milestone, values_from=status, values_fn=function(x) x[1]) |> arrange(ord)
   cols <- list()
   if(has_group) cols[["Country"]] <- wide$group
   if(has_anal)  cols[["Analysis Center"]] <- wide$analysis
@@ -283,173 +301,180 @@ render_tracker_dt <- function(d, shape="oval"){
   if(has_canc)  cols[["Cancer Types"]] <- wide$cancer
   if(has_prop)  cols[["Proposed Cases"]] <- wide$proposed
   df <- data.frame(cols, check.names=FALSE, stringsAsFactors=FALSE)
+  if(has_proj) df <- cbind(df[seq_len(match("Study / Dataset", names(df)))],
+                           Project=factor(wide$project),
+                           df[-seq_len(match("Study / Dataset", names(df)))], stringsAsFactors=FALSE)
   for(m in miles){ lv <- intersect(status_levels, unique(wide[[m]])); df[[m]] <- factor(wide[[m]], levels=lv) }
   if(shownotes) df[["Notes"]] <- wide$notes
   mile_targets <- which(names(df) %in% miles) - 1L
-  non_mile     <- setdiff(seq_len(ncol(df)) - 1L, mile_targets)
+  non_mile     <- setdiff(seq_len(ncol(df)) - 1L, c(mile_targets, which(names(df)=="Project") - 1L))
   DT::datatable(df, rownames=FALSE, escape=FALSE, filter="top",
-    options=list(pageLength=25, scrollX=TRUE, autoWidth=FALSE, dom='ftip',
-      columnDefs=list(
-        list(targets=mile_targets, className="dt-center",
-             render=DT::JS(paste0("window.clicMark('", shape, "')"))),
-        list(targets=mile_targets, orderable=FALSE),
-        list(targets=non_mile, searchable=FALSE))))
+                options=list(pageLength=25, scrollX=TRUE, autoWidth=FALSE, dom='ftip',
+                             columnDefs=list(
+                               list(targets=mile_targets, className="dt-center",
+                                    render=DT::JS(paste0("window.clicMark('", shape, "')"))),
+                               list(targets=mile_targets, orderable=FALSE),
+                               list(targets=non_mile, searchable=FALSE))))
 }
 
 render_study <- function(study){
   blocks <- lapply(SUMMARY_PAGES, function(pg){
     d <- clic[clic$page==pg & clic$label==study,]; d <- d[order(d$col_order),]
     if(!nrow(d)) return(card(card_header(short_title(pg)),
-      div(style="color:#5A727C;font-size:13px;","No record for this study in this tab.")))
+                             div(style="color:#5A727C;font-size:13px;","No record for this study in this tab.")))
     meta <- paste(c(if(nzchar(d$group[1])) d$group[1], if(nzchar(d$inst[1])) d$inst[1]), collapse=" \u00b7 ")
     rows <- lapply(seq_len(nrow(d)), function(i)
       tags$tr(tags$td(class="study", d$milestone[i]),
-        tags$td(style="padding:5px 0;", span(class="ov", style=paste0("background:",scolor(d$status[i]),";")),
-          span(style="margin-left:8px;font-size:12.5px;", leglab(as.character(d$status[i]))))))
+              tags$td(style="padding:5px 0;", span(class="ov", style=paste0("background:",scolor(d$status[i]),";")),
+                      span(style="margin-left:8px;font-size:12.5px;", leglab(as.character(d$status[i]))))))
     notes <- unique(d$notes[nzchar(d$notes)])
     card(card_header(short_title(pg)),
-      if(nzchar(meta)) div(style="color:#505A5A;font-size:12px;margin-bottom:6px;", meta),
-      tags$table(class="clic-tbl", tags$tbody(rows)),
-      if(length(notes)) div(style="margin-top:8px;font-size:12px;color:#8C6D1F;", paste0("Notes: ", paste(notes, collapse="; "))))
+         if(nzchar(meta)) div(style="color:#505A5A;font-size:12px;margin-bottom:6px;", meta),
+         tags$table(class="clic-tbl", tags$tbody(rows)),
+         if(length(notes)) div(style="margin-top:8px;font-size:12px;color:#8C6D1F;", paste0("Notes: ", paste(notes, collapse="; "))))
   })
   do.call(tagList, blocks)
 }
 
 gg_base <- theme_minimal(base_size=12)+theme(panel.grid.minor=element_blank(),
-  panel.grid.major.y=element_blank(),legend.position="top",legend.title=element_blank(),
-  legend.text=element_text(size=14),legend.key.size=unit(16,"pt"))
+                                             panel.grid.major.y=element_blank(),legend.position="top",legend.title=element_blank(),
+                                             legend.text=element_text(size=14),legend.key.size=unit(16,"pt"))
 
 # ---- UI ----
 make_tab <- function(s){
   if(s %in% REG_SHEETS)
     nav_panel(short_title(s), value=s, card(full_screen=TRUE,
-      card_header(paste0(s," — study registry")), DTOutput(paste0("reg_",make.names(s)))))
+                                            card_header(paste0(s," — study registry")), DTOutput(paste0("reg_",make.names(s)))))
   else
     nav_panel(short_title(s), value=s, card(full_screen=TRUE,
-      card_header(paste0(s," — milestone status (use the boxes under each column header to filter)")),
-      legend_ui, tags$hr(style="margin:8px 0;border-color:#E1E8E4;"),
-      DTOutput(paste0("trk_",make.names(s)))))
+                                            card_header(paste0(s," — milestone status (use the boxes under each column header to filter)")),
+                                            legend_ui, tags$hr(style="margin:8px 0;border-color:#E1E8E4;"),
+                                            DTOutput(paste0("trk_",make.names(s)))))
 }
 
 home_tab <- nav_panel("Home", value="Home",
-  div(class="hero", img(src=LOGO, alt="CLIC", class="hero-logo"),
-    div(class="hero-sub", HTML("Genomics progress across CLIC studies \u00b7 <b>GlobALL</b> project"))),
-  layout_columns(col_widths=c(6,6),
-    card(card_header("Tabs at a glance"), uiOutput("home_overview")),
-    card(card_header("Total studies by tab"), uiOutput("home_kpis"))))
+                      div(class="hero", img(src=LOGO, alt="CLIC", class="hero-logo"),
+                          div(class="hero-sub", HTML("Genomics progress across CLIC studies \u00b7 <b>GlobALL</b> project"))),
+                      layout_columns(col_widths=c(6,6),
+                                     card(card_header("Tabs at a glance"), uiOutput("home_overview")),
+                                     card(card_header("Total studies by tab"), uiOutput("home_kpis"))))
 
 genomic_all_tab <- nav_panel("Genomic Pipeline", value="GenomicAll", card(full_screen=TRUE,
-  card_header("Genomic Pipeline \u2014 all studies (use the boxes under each status column to filter)"),
-  legend_ui, tags$hr(style="margin:8px 0;border-color:#E1E8E4;"),
-  DTOutput("trk_genomic_all")))
+                                                                          card_header("Genomic Pipeline \u2014 all studies (use the boxes under each status column to filter)"),
+                                                                          legend_ui, tags$hr(style="margin:8px 0;border-color:#E1E8E4;"),
+                                                                          DTOutput("trk_genomic_all")))
 
 globall_tab <- nav_panel("GlobALL Pipeline", value="GlobALLPipe", card(full_screen=TRUE,
-  card_header("GlobALL Pipeline \u2014 GlobALL project studies (use the boxes under each status column to filter)"),
-  legend_ui, tags$hr(style="margin:8px 0;border-color:#E1E8E4;"),
-  DTOutput("trk_globall")))
+                                                                       card_header("GlobALL Pipeline \u2014 GlobALL project studies (use the boxes under each status column to filter)"),
+                                                                       legend_ui, tags$hr(style="margin:8px 0;border-color:#E1E8E4;"),
+                                                                       DTOutput("trk_globall")))
 
 summary_tab <- nav_panel("Overall Summary", value="Summary",
-  layout_columns(col_widths=c(6,6),
-    card(card_header("Per-tab summary"), uiOutput("home_summary")),
-    card(card_header("Cancer types across genomic studies"), plotOutput("home_cancer", height=380))),
-  card(card_header("Status share by tab"), plotOutput("home_pies2", height=300)),
-  uiOutput("summary_vboxes"))
+                         layout_columns(col_widths=c(6,6),
+                                        card(card_header("Per-tab summary"), uiOutput("home_summary")),
+                                        card(card_header("Cancer types across genomic studies"), plotOutput("home_cancer", height=380))),
+                         card(card_header("Status share by tab"), plotOutput("home_pies2", height=300)),
+                         uiOutput("summary_vboxes"))
 
 study_tab <- nav_panel("Study Summary", value="StudySummary",
-  card(card_header("Per-study summary \u2014 all pipelines for one study"),
-    div(style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;",
-      div(style="min-width:300px;flex:1;",
-        selectInput("sel_study","Select a study", choices=study_sum_choices,
-                    selected=if(length(study_sum_choices)) study_sum_choices[1] else NULL)),
-      downloadButton("study_pdf","Download PDF", class="btn-primary"),
-      downloadButton("study_word","Download Word")),
-    tags$hr(style="border-color:#E1E8E4;"),
-    legend_ui),
-  uiOutput("study_view"))
+                       card(card_header("Per-study summary \u2014 all pipelines for one study"),
+                            div(style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;",
+                                div(style="min-width:300px;flex:1;",
+                                    selectInput("sel_study","Select a study", choices=study_sum_choices,
+                                                selected=if(length(study_sum_choices)) study_sum_choices[1] else NULL)),
+                                downloadButton("study_pdf","Download PDF", class="btn-primary"),
+                                downloadButton("study_word","Download Word")),
+                            tags$hr(style="border-color:#E1E8E4;"),
+                            legend_ui),
+                       uiOutput("study_view"))
 
 sidebar_ui <- sidebar(width=255, title="Filters",
-  selectizeInput("analyses","Analysis Center", multiple=TRUE, choices=analysis_choices, options=list(placeholder="All analysis centers")),
-  selectizeInput("continents","Continent", multiple=TRUE, choices=cont_choices, options=list(placeholder="All continents")),
-  selectizeInput("countries","Country", multiple=TRUE, choices=country_choices, options=list(placeholder="All countries")),
-  selectizeInput("insts","Institution", multiple=TRUE, choices=inst_choices, options=list(placeholder="All institutions")),
-  selectizeInput("studies","Study Name", multiple=TRUE, choices=study_choices, options=list(placeholder="All studies")),
-  checkboxGroupInput("statuses","Status (mix chart only)", choices=status_levels, selected=status_levels),
-  hr(),
-  radioButtons("fmt","Report format", c("Word (.docx)"="word","PDF"="pdf"), selected="word"),
-  downloadButton("report","Download report", class="btn-primary w-100"))
+                      selectInput("project","Project", choices=c("All projects"="All", project_choices), selected="All"),
+                      selectizeInput("analyses","Analysis Center", multiple=TRUE, choices=analysis_choices, options=list(placeholder="All analysis centers")),
+                      selectizeInput("continents","Continent", multiple=TRUE, choices=cont_choices, options=list(placeholder="All continents")),
+                      selectizeInput("countries","Country", multiple=TRUE, choices=country_choices, options=list(placeholder="All countries")),
+                      selectizeInput("insts","Institution", multiple=TRUE, choices=inst_choices, options=list(placeholder="All institutions")),
+                      selectizeInput("studies","Study Name", multiple=TRUE, choices=study_choices, options=list(placeholder="All studies")),
+                      checkboxGroupInput("statuses","Status (mix chart only)", choices=status_levels, selected=status_levels),
+                      hr(),
+                      radioButtons("fmt","Report format", c("Word (.docx)"="word","PDF"="pdf"), selected="word"),
+                      downloadButton("report","Download report", class="btn-primary w-100"))
 
-MID_SHEETS  <- intersect(c("Total Studies","Genomic Pipeline","Phenotype Data","Epi Data","IARC DCC Transfer"), SHEETS)
+MID_SHEETS  <- intersect(c("Total Studies","Genomic Pipeline","Phenotype Data","Phenotype Data Main","Epi Data","IARC DCC Transfer"), SHEETS)
 OTHER_SHEETS<- setdiff(SHEETS, c(MID_SHEETS,"CoordinatingAnalysisCenter"))
 TAIL_SHEETS <- intersect("CoordinatingAnalysisCenter", SHEETS)
 
 ui <- do.call(page_navbar, c(
   list(id="nav",
-    title=div(style="display:flex;align-items:center;gap:10px;",
-      img(src=MARK, height="32", alt="CLIC"),
-      span(style="font-family:'Fraunces';font-weight:600;","CLIC")),
-    theme=app_theme, window_title="CLIC Dashboard",
-    header=tags$head(tags$style(css), tags$script(HTML(mark_js)), tags$link(rel="stylesheet",
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap")),
-    sidebar=sidebar_ui),
+       title=div(style="display:flex;align-items:center;gap:10px;",
+                 img(src=MARK, height="32", alt="CLIC"),
+                 span(style="font-family:'Fraunces';font-weight:600;","CLIC")),
+       theme=app_theme, window_title="CLIC Dashboard",
+       header=tags$head(tags$style(css), tags$script(HTML(mark_js)), tags$link(rel="stylesheet",
+                                                                               href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap")),
+       sidebar=sidebar_ui),
   list(home_tab, summary_tab, study_tab),
   lapply(intersect(c("Total Studies"), SHEETS), make_tab),
   list(globall_tab),
-  lapply(intersect(c("Phenotype Data","Epi Data","IARC DCC Transfer"), SHEETS), make_tab),
+  lapply(intersect(c("Phenotype Data","Phenotype Data Main","Epi Data","IARC DCC Transfer"), SHEETS), make_tab),
   lapply(OTHER_SHEETS, make_tab),
   lapply(TAIL_SHEETS, make_tab)))
 
 # ---- SERVER ----
 server <- function(input, output, session){
   base <- reactive({ d<-clic
-    if(length(input$analyses))   d<-d[d$analysis %in% input$analyses,]
-    if(length(input$continents)) d<-d[d$continent %in% input$continents,]
-    if(length(input$countries))  d<-d[trimws(d$group) %in% input$countries,]
-    if(length(input$insts))      d<-d[d$inst %in% input$insts,]
-    if(length(input$studies))    d<-d[d$label %in% input$studies,]
-    d })
+  # Project applies to the sheets that carry a Project column; other sheets are left as they are.
+  if(!is.null(input$project) && input$project!="All") d<-d[d$project==input$project | d$project=="",]
+  if(length(input$analyses))   d<-d[d$analysis %in% input$analyses,]
+  if(length(input$continents)) d<-d[d$continent %in% input$continents,]
+  if(length(input$countries))  d<-d[trimws(d$group) %in% input$countries,]
+  if(length(input$insts))      d<-d[d$inst %in% input$insts,]
+  if(length(input$studies))    d<-d[d$label %in% input$studies,]
+  d })
   reg_filter <- function(df){
     if(length(input$continents) && "Continent"%in%names(df)) df<-df[trimws(df$Continent)%in%input$continents,]
     cc<-reg_country_col(df); if(length(input$countries) && !is.na(cc)) df<-df[canon_country(df[[cc]])%in%input$countries,]
     df }
-
+  
   for(s in TRK_SHEETS) local({ sh<-s
-    output[[paste0("trk_",make.names(sh))]] <- renderDT(render_tracker_dt(base()[base()$page==sh,], shape_of(sh))) })
+  output[[paste0("trk_",make.names(sh))]] <- renderDT(render_tracker_dt(base()[base()$page==sh,], shape_of(sh))) })
   output$trk_genomic_all <- renderDT(render_tracker_dt(base()[base()$page=="Genomic Pipeline",], "oval"))
   output$trk_globall     <- renderDT(render_tracker_dt(base()[base()$page=="Genomic Pipeline" & base()$project=="GlobALL",], "oval"))
   for(s in REG_SHEETS) local({ sh<-s
-    output[[paste0("reg_",make.names(sh))]] <- renderDT(
-      datatable(reg_filter(REGISTRY[[sh]]), rownames=FALSE, filter="top",
-                options=list(pageLength=15, scrollX=TRUE))) })
-
+  output[[paste0("reg_",make.names(sh))]] <- renderDT(
+    datatable(reg_filter(REGISTRY[[sh]]), rownames=FALSE, filter="top",
+              options=list(pageLength=15, scrollX=TRUE))) })
+  
   output$home_summary <- renderUI({
     d <- base()
     s <- d |> group_by(Tab=page) |> summarise(Studies=dplyr::n_distinct(ord),
-            Milestones=dplyr::n_distinct(milestone), pct=round(mean(status=="Complete")*100), .groups="drop")
+                                              Milestones=dplyr::n_distinct(milestone), pct=round(mean(status=="Complete")*100), .groups="drop")
     s <- s[match(intersect(SHEETS, s$Tab), s$Tab),]
+    s$Studies <- vapply(s$Tab, function(tb) study_units(dplyr::distinct(d[d$page==tb,], ord, label)$label, tb), integer(1))
     mixbar <- function(tab){
       cc <- d |> filter(page==tab) |> count(status); tot<-sum(cc$n); if(!tot) return(NULL)
       div(class="mix", lapply(seq_len(nrow(cc)), function(i)
         span(style=sprintf("width:%.1f%%;background:%s;", cc$n[i]/tot*100, scolor(cc$status[i])),
              title=sprintf("%s: %d", as.character(cc$status[i]), cc$n[i])))) }
     head <- tags$tr(tags$th("Tab"), tags$th(class="r","Studies"), tags$th(class="r","Milestones"),
-      tags$th(class="r","% complete"), tags$th("Status mix"))
+                    tags$th(class="r","% complete"), tags$th("Status mix"))
     reg <- lapply(REG_SHEETS, function(rs)
       tags$tr(tags$td(class="tab", short_title(rs)), tags$td(class="r", nrow(reg_filter(REGISTRY[[rs]]))),
-        tags$td(class="r","\u2014"), tags$td(class="r","\u2014"),
-        tags$td(tags$em(style="color:#5A727C;font-size:11px;","registry"))))
+              tags$td(class="r","\u2014"), tags$td(class="r","\u2014"),
+              tags$td(tags$em(style="color:#5A727C;font-size:11px;","registry"))))
     body <- lapply(seq_len(nrow(s)), function(i) tags$tr(
       tags$td(class="tab", short_title(s$Tab[i])), tags$td(class="r", s$Studies[i]), tags$td(class="r", s$Milestones[i]),
       tags$td(class="r", sprintf("%d%%", s$pct[i])), tags$td(mixbar(s$Tab[i]))))
     tags$table(class="sumtbl", tags$thead(head), tags$tbody(reg, body))
   })
-
+  
   output$home_plot <- renderPlot({
     d <- base(); if(length(input$statuses)) d <- d[as.character(d$status)%in%input$statuses,]
     validate(need(nrow(d)>0,"No data for current filters."))
     d |> count(page,status) |> mutate(page=factor(page, levels=rev(intersect(SHEETS, unique(page))))) |>
       ggplot(aes(n,page,fill=status))+geom_col(width=.72)+scale_fill_manual(values=STATUS_COLORS,drop=FALSE)+
       labs(x="Cells",y=NULL)+gg_base })
-
+  
   output$home_overview <- renderUI({
     d <- base()
     ov_item <- function(pg){
@@ -457,27 +482,27 @@ server <- function(input, output, session){
         df <- reg_filter(REGISTRY[[pg]]); col <- reg_study_col(df)
         n <- if(is.na(col)) nrow(df) else sum(split_count(df[[col]]))
         return(div(class="ovitem",
-          div(class="h", span(class="nm", short_title(pg)), span(class="st", paste0(n," studies \u00b7 registry"))),
-          div(class="ds", tab_desc(pg))))
+                   div(class="h", span(class="nm", short_title(pg)), span(class="st", paste0(n," studies \u00b7 registry"))),
+                   div(class="ds", tab_desc(pg))))
       }
       dp <- d[d$page==pg,]; if(!nrow(dp)) return(NULL)
       pct <- round(mean(dp$status=="Complete")*100)
-      ns  <- sum(split_tracker(dplyr::distinct(dp, ord, label)$label))
+      ns  <- study_units(dplyr::distinct(dp, ord, label)$label, pg)
       div(class="ovitem",
-        div(class="h", span(class="nm", short_title(pg)),
-            span(class="st", sprintf("%d studies \u00b7 %d%% complete", ns, pct))),
-        div(class="ds", tab_desc(pg)),
-        mix_div(dplyr::count(dp, status)))
+          div(class="h", span(class="nm", short_title(pg)),
+              span(class="st", sprintf("%d studies \u00b7 %d%% complete", ns, pct))),
+          div(class="ds", tab_desc(pg)),
+          mix_div(dplyr::count(dp, status)))
     }
     globall_item <- function(){
       dp <- d[d$page=="Genomic Pipeline" & d$project=="GlobALL",]; if(!nrow(dp)) return(NULL)
-      pct <- round(mean(dp$status=="Complete")*100)
-      ns  <- sum(split_tracker(dplyr::distinct(dp, ord, label)$label))
+      pct <- pipeline_progress(dp)
+      ns  <- study_units(dplyr::distinct(dp, ord, label)$label, "Genomic Pipeline")
       div(class="ovitem",
-        div(class="h", span(class="nm", style="color:#E6A700;", "GlobALL Pipeline"),
-            span(class="st", sprintf("%d studies \u00b7 %d%% complete", ns, pct))),
-        div(class="ds", "GlobALL project studies only \u2014 the genomics pipeline filtered to Project = GlobALL."),
-        mix_div(dplyr::count(dp, status)))
+          div(class="h", span(class="nm", style="color:#E6A700;", "GlobALL Pipeline"),
+              span(class="st", sprintf("%d studies \u00b7 %d%% complete", ns, pct))),
+          div(class="ds", "GlobALL project studies only \u2014 the genomics pipeline filtered to Project = GlobALL."),
+          mix_div(dplyr::count(dp, status)))
     }
     order_pgs <- intersect(SHEETS, c(MID_SHEETS, OTHER_SHEETS, TAIL_SHEETS))
     items <- list()
@@ -487,7 +512,7 @@ server <- function(input, output, session){
     }
     div(class="ovlist", items)
   })
-
+  
   pies <- function(){
     d <- base(); d <- d[d$page %in% setdiff(TRK_SHEETS, "CoordinatingAnalysisCenter"),]
     validate(need(nrow(d)>0,"No data for current filters."))
@@ -501,25 +526,25 @@ server <- function(input, output, session){
             strip.text=element_text(face="bold",size=12))
   }
   output$home_pies2 <- renderPlot(pies())
-
+  
   output$summary_vboxes <- renderUI({
     d <- base(); gl <- d[d$page=="Genomic Pipeline" & d$project=="GlobALL",]
-    n_gl <- sum(split_tracker(dplyr::distinct(gl, ord, label)$label))
-    # Headline GlobALL figures reconciled to the pipeline slide (Sep 2026, new algorithm):
-    # overall progress on the 11-stage basis (UKCCS N/A handled); QC = post-imputation QC, split convention.
-    prog    <- 72L
-    through <- 16L
+    n_gl <- study_units(dplyr::distinct(gl, ord, label)$label, "Genomic Pipeline")
+    # Headline GlobALL figures, computed from the data with the same rules as the pipeline slide.
+    prog    <- pipeline_progress(gl)
+    qc      <- gl[grepl("Post-Imputation", gl$milestone) & as.character(gl$status)=="Complete",]
+    through <- study_units(dplyr::distinct(qc, ord, label)$label, "Genomic Pipeline")
     tagList(
       div(style="font-family:'Fraunces';font-weight:600;font-size:17px;margin:8px 2px 10px;color:#2A4A4B;", "GlobALL info"),
       layout_columns(col_widths=c(4,4,4),
-        value_box("Studies in GlobALL pipeline", n_gl,
-                  theme=value_box_theme(bg="#3E8E78", fg="#FFFFFF")),
-        value_box("Overall progress (GlobALL)", paste0(prog,"%"),
-                  theme=value_box_theme(bg="#78B4CC", fg="#12343B")),
-        value_box("Studies through post-imputation QC (GlobALL)", through,
-                  theme=value_box_theme(bg="#ffcc33", fg="#2A4A4B"))))
+                     value_box("Studies in GlobALL pipeline", n_gl,
+                               theme=value_box_theme(bg="#3E8E78", fg="#FFFFFF")),
+                     value_box("Overall progress (GlobALL)", paste0(prog,"%"),
+                               theme=value_box_theme(bg="#78B4CC", fg="#12343B")),
+                     value_box("Studies through post-imputation QC (GlobALL)", through,
+                               theme=value_box_theme(bg="#ffcc33", fg="#2A4A4B"))))
   })
-
+  
   output$home_cancer <- renderPlot({
     d <- base(); d <- d[d$page=="Genomic Pipeline",]
     st <- dplyr::distinct(d, ord, cancer)
@@ -542,7 +567,7 @@ server <- function(input, output, session){
       scale_fill_manual(values=pal)+theme_void(base_size=12)+
       theme(legend.position="right", legend.title=element_blank(),
             legend.text=element_text(size=14), legend.key.size=unit(16,"pt")) })
-
+  
   output$home_kpis <- renderUI({
     d <- base()
     kpi_card <- function(pg){
@@ -550,13 +575,13 @@ server <- function(input, output, session){
         df <- reg_filter(REGISTRY[[pg]]); col <- reg_study_col(df)
         n <- if(is.na(col)) nrow(df) else sum(split_count(df[[col]]))
       } else {
-        labs <- d[d$page==pg,] |> distinct(ord,label) |> pull(label); n <- sum(split_tracker(labs))
+        labs <- d[d$page==pg,] |> distinct(ord,label) |> pull(label); n <- study_units(labs, pg)
       }
       div(class="kpi", div(class="num", n), div(class="lbl", short_title(pg)))
     }
     globall_card <- function(){
       labs <- d[d$page=="Genomic Pipeline" & d$project=="GlobALL",] |> distinct(ord,label) |> pull(label)
-      div(class="kpi", div(class="num", style="color:#E6A700;", sum(split_tracker(labs))),
+      div(class="kpi", div(class="num", style="color:#E6A700;", study_units(labs, "Genomic Pipeline")),
           div(class="lbl", "GlobALL Pipeline"))
     }
     order_pgs <- intersect(SHEETS, c(MID_SHEETS, OTHER_SHEETS, TAIL_SHEETS))
@@ -567,7 +592,7 @@ server <- function(input, output, session){
     }
     div(class="kpigrid", cards)
   })
-
+  
   output$home_complete <- renderPlot({
     d <- base(); d <- d[d$page %in% TRK_SHEETS,]
     validate(need(nrow(d)>0,"No data for current filters."))
@@ -577,13 +602,13 @@ server <- function(input, output, session){
       geom_text(aes(label=paste0(pct,"%")),hjust=-0.15,size=3.6,color="#2A4A4B")+
       scale_x_continuous(limits=c(0,100),expand=expansion(mult=c(0,.12)))+
       labs(x="% complete",y=NULL)+gg_base+theme(legend.position="none") })
-
+  
   scope_txt <- reactive({
     parts <- c(if(length(input$continents)) paste(input$continents,collapse=", "),
                if(length(input$countries)) paste(input$countries,collapse=", "),
                if(length(input$studies)) paste(length(input$studies),"studies"))
     if(length(parts)) paste(parts,collapse=" \u00b7 ") else "All studies" })
-
+  
   output$report <- downloadHandler(
     filename = function() {
       paste0("CLIC_progress_", Sys.Date(), ".", c(html = "html", word = "docx", pdf = "pdf")[[input$fmt]])
@@ -598,8 +623,8 @@ server <- function(input, output, session){
       
       # 3. Clean and prepare the data pipeline
       dat <- base() |> transmute(page, country = group, institution = inst, study = label, project, cancer, milestone, status, notes)
-    ts_reg <- reg_filter(REGISTRY[["Total Studies"]]); ts_col <- reg_study_col(ts_reg)
-    n_total <- if(is.null(ts_reg) || is.na(ts_col)) length(unique(dat$study)) else sum(split_count(ts_reg[[ts_col]]))
+      ts_reg <- reg_filter(REGISTRY[["Total Studies"]]); ts_col <- reg_study_col(ts_reg)
+      n_total <- if(is.null(ts_reg) || is.na(ts_col)) length(unique(dat$study)) else sum(split_count(ts_reg[[ts_col]]))
       
       # 4. Render the document with progress bar tracking
       withProgress(message = paste0("Rendering ", toupper(input$fmt), "\u2026"), value = 0.5, {
@@ -621,7 +646,7 @@ server <- function(input, output, session){
     }
   )
   
-
+  
   output$study_view <- renderUI({ req(input$sel_study); render_study(input$sel_study) })
   study_dl <- function(fmt) downloadHandler(
     filename=function() paste0("GlobALL_", gsub("[^A-Za-z0-9]+","_",input$sel_study), "_",
@@ -633,8 +658,8 @@ server <- function(input, output, session){
         transmute(page, country=group, institution=inst, project, cancer, milestone, col_order, status=as.character(status), notes)
       withProgress(message=paste0("Rendering ",toupper(fmt),"\u2026"), value=0.5, {
         rmarkdown::render(tmp, output_format=of, output_file=file,
-          params=list(study=input$sel_study, data=as.data.frame(dat), pages=SUMMARY_PAGES),
-          envir=new.env(parent=globalenv())) }) })
+                          params=list(study=input$sel_study, data=as.data.frame(dat), pages=SUMMARY_PAGES),
+                          envir=new.env(parent=globalenv())) }) })
   output$study_pdf  <- study_dl("pdf")
   output$study_word <- study_dl("word")
 }
