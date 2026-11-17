@@ -534,17 +534,19 @@ server <- function(input, output, session){
     prog    <- pipeline_progress(gl)
     qc      <- gl[grepl("Post-Imputation", gl$milestone) & as.character(gl$status)=="Complete",]
     through <- study_units(dplyr::distinct(qc, ord, label)$label, "Genomic Pipeline")
+    n_ctry  <- dplyr::n_distinct(gl$group[nzchar(gl$group) & !is.na(gl$group)])   # <- NEW
     tagList(
       div(style="font-family:'Fraunces';font-weight:600;font-size:17px;margin:8px 2px 10px;color:#2A4A4B;", "GlobALL info"),
-      layout_columns(col_widths=c(4,4,4),
+      layout_columns(col_widths=c(3,3,3,3),                                          # <- CHANGED
                      value_box("Studies in GlobALL pipeline", n_gl,
                                theme=value_box_theme(bg="#3E8E78", fg="#FFFFFF")),
+                     value_box("Countries represented (GlobALL)", n_ctry,             # <- NEW
+                               theme=value_box_theme(bg="#C0D8A8", fg="#2A4A4B")),
                      value_box("Overall progress (GlobALL)", paste0(prog,"%"),
                                theme=value_box_theme(bg="#78B4CC", fg="#12343B")),
                      value_box("Studies through post-imputation QC (GlobALL)", through,
                                theme=value_box_theme(bg="#ffcc33", fg="#2A4A4B"))))
   })
-  
   output$home_cancer <- renderPlot({
     d <- base(); d <- d[d$page=="Genomic Pipeline",]
     st <- dplyr::distinct(d, ord, cancer)
